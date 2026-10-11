@@ -281,10 +281,16 @@ impl Initializer {
                             crate::account::reporting::update(|s| {
                                 s.registration = "正在读取本机信息".into()
                             });
-                            let hardware = tokio::task::spawn_blocking(
-                                crate::platform::windows::device_profile::Hardware::read,
-                            )
-                            .await??;
+                            let hardware = if crate::account::auth::portable_mode() {
+                                // Controller-only registration deliberately avoids reading
+                                // host BIOS UUID, machine GUID and motherboard information.
+                                crate::platform::windows::device_profile::Hardware::default()
+                            } else {
+                                tokio::task::spawn_blocking(
+                                    crate::platform::windows::device_profile::Hardware::read,
+                                )
+                                .await??
+                            };
                             let body = identity.device_init_request(&hardware)?;
                             crate::account::reporting::update(|s| {
                                 s.hardware = Some(hardware);

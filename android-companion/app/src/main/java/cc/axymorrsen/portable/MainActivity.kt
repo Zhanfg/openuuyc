@@ -85,6 +85,7 @@ class MainActivity : ComponentActivity() {
             val repoIndex = remember(tree, refresh) { child(root, "Control", "registry", "repos.csv") }
             val totp = remember(tree, refresh) { child(root, "Secure", "TOTP", "Authenticator.kdbx") }
             val valid = remember(tree, refresh) { root != null && child(root, "Control")?.isDirectory == true }
+            val dirs = remember(tree, refresh) { root?.listFiles()?.sortedBy { it.name }.orEmpty() }
             MaterialTheme(colorScheme = dynamicColorScheme()) {
                 Scaffold(
                     topBar = {
@@ -135,7 +136,6 @@ class MainActivity : ComponentActivity() {
                                 item { Text("共享目录", style=MaterialTheme.typography.titleMedium) }
                                 if (!valid) item { Text("连接 U 盘后显示开发栈目录。") }
                                 else {
-                                    val dirs = remember(tree, refresh) { root?.listFiles()?.sortedBy { it.name }.orEmpty() }
                                     items(dirs) { file ->
                                         ActionCard(file.name ?: "（无名称）", if(file.isDirectory) "目录 · 可交由系统文件管理器打开" else "文件", if(file.isDirectory) Icons.Outlined.Folder else Icons.Outlined.Description) {
                                             // SAF does not guarantee that providers expose a browsable directory UI.

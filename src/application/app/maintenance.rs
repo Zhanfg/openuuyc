@@ -11,6 +11,12 @@ use std::{
 };
 
 pub(crate) fn route_gui() -> Result<bool> {
+    // Portable controller launched from AXY DevStack. The EXE remains on the
+    // removable drive even when a separately installed OpenUUYC exists.
+    // This flag does NOT redirect account secrets or enable unattended hosting.
+    if std::env::var_os("AXY_OPENUUYC_PORTABLE").as_deref() == Some(std::ffi::OsStr::new("1")) {
+        return Ok(false);
+    }
     cleanup_helpers();
     if !deployment::needs_handoff()? {
         return Ok(false);

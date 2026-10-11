@@ -4,7 +4,8 @@ on:
     branches:
       - feature/portable-usb-devstack
     paths:
-      - 'src/application/app/maintenance.rs'
+      - 'src/**'
+      - 'crates/**'
       - '.github/workflows/portable-windows.yml'
       - 'Cargo.toml'
       - 'Cargo.lock'
@@ -59,6 +60,15 @@ jobs:
           New-Item -ItemType Directory -Force 'portable/Apps/OpenUUYC' | Out-Null
           $exe = Get-ChildItem 'target/dist/native' -Filter '*.exe' -File | Select-Object -First 1
           Copy-Item $exe.FullName 'portable/Apps/OpenUUYC/OpenUUYC.exe'
+          # A verified artifact marker for the USB launcher; upstream EXEs
+          # must not accidentally be run with USB credential expectations.
+          @'
+          Source=Zhanfg/openuuyc
+          Branch=feature/portable-usb-devstack
+          Mode=controller-only
+          CredentialStore=USB-Argon2id-XChaCha20Poly1305
+          VirtualIdentity=stable-per-vault
+          '@ | Set-Content 'portable/Apps/OpenUUYC/AXY_PORTABLE_BUILD.txt' -Encoding ascii
           Copy-Item LICENSE 'portable/LICENSE-OpenUUYC.txt'
           Copy-Item THIRD_PARTY_NOTICES 'portable/THIRD_PARTY_NOTICES.txt'
           @'

@@ -13,9 +13,9 @@ fn failure(error: anyhow::Error) -> Error {
 }
 impl SecretEntry {
     fn removable(&self) -> bool {
-        super::portable_vault::enabled() &&
-        (self.service == "com.openuuyc.session" && self.account == "default-nrd-login"
-            || self.service.starts_with("com.openuuyc.assist."))
+        super::portable_vault::enabled()
+            && (self.service == "com.openuuyc.session"
+                || self.service.starts_with("com.openuuyc.assist."))
     }
     pub fn new(service: &str, account: &str) -> Result<Self, Error> {
         Ok(Self {
@@ -30,11 +30,20 @@ impl SecretEntry {
             match super::portable_vault::read(&self.service, &self.account).map_err(failure)? {
                 Some(bytes) => return Ok(bytes),
                 None => {
-                    // One-time opt-in migration from this Windows user's credential manager.
-                    let legacy = self.local.get_secret()?;
-                    super::portable_vault::write(&self.service, &self.account, Some(&legacy))
+                    // Never import a physical machine identity or an arbitrary
+                    // other Windows user's credentials into the removable vault.
+                    // Explicit one-time import is available for login sessions only.
+                    let import = self.service == "com.openuuyc.session"
+                        && self.account == "default-nrd-login"
+                        && std::env::var_os("AXY_OPENUUYC_IMPORT_SESSION").as_deref()
+                            == Some(std::ffi::OsStr::new("1"));
+                    if !import {
+                        return Err(Error::NoEntry);
+                    }
+                    let existing = self.local.get_secret()?;
+                    super::portable_vault::write(&self.service, &self.account, Some(&existing))
                         .map_err(failure)?;
-                    return Ok(legacy);
+                    return Ok(existing);
                 }
             }
         }

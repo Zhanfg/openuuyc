@@ -346,6 +346,7 @@ pub struct KeyringIdentityStore {
 
 impl KeyringIdentityStore {
     pub fn new() -> Result<Self> {
+        portable_vault::initialize()?;
         generation::ensure()?;
         let entry = SecretEntry::new(SERVICE, IDENTITY_ACCOUNT)
             .context("native secure credential store is unavailable")?;
@@ -419,6 +420,7 @@ impl KeyringIdentityStore {
 
 impl KeyringSessionStore {
     pub fn new() -> Result<Self> {
+        portable_vault::initialize()?;
         generation::ensure()?;
         let entry = SecretEntry::new(SERVICE, SESSION_ACCOUNT)
             .context("native secure credential store is unavailable")?;

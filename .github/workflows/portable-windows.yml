@@ -1,0 +1,91 @@
+name: Portable OpenUUYC (USB controller)
+on:
+  push:
+    branches:
+      - feature/portable-usb-devstack
+    paths:
+      - 'src/**'
+      - 'crates/**'
+      - '.github/workflows/portable-windows.yml'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'xtask/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  portable-windows:
+    runs-on: windows-2022
+    timeout-minutes: 180
+    steps:
+      - name: Checkout user's fork
+        uses: actions/checkout@v4
+      - name: Install stable Rust MSVC
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+      - name: Ensure NASM for SIMD codec build
+        shell: pwsh
+        run: |
+          if (-not (Get-Command nasm -ErrorAction SilentlyContinue)) {
+            choco install nasm --yes --no-progress
+          }
+          $nasm = (Get-Command nasm -ErrorAction SilentlyContinue).Source
+          if (-not $nasm) { $nasm = 'C:\\Program Files\\NASM\\nasm.exe' }
+          if (-not (Test-Path -LiteralPath $nasm)) { throw 'NASM executable not found' }
+          $folder = Split-Path -Parent $nasm
+          $folder | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          & $nasm -v
+      - name: Resolve prototype vault dependencies
+        shell: pwsh
+        run: cargo update
+      - name: Build fork's native single-file executable
+        shell: pwsh
+        run: |
+          cargo dist --native
+          if ($LASTEXITCODE -ne 0) { throw 'cargo dist --native failed' }
+      - name: Portable controller smoke test
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem 'target/dist/native' -Filter '*.exe' -File | Select-Object -First 1
+          if (-not $exe) { throw 'Built exe not found' }
+          $env:AXY_OPENUUYC_PORTABLE = '1'
+          & $exe.FullName --help
+          if ($LASTEXITCODE -ne 0) { throw 'OpenUUYC --help failed' }
+      - name: Stage personal portable artifact
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force 'portable/Apps/OpenUUYC' | Out-Null
+          $exe = Get-ChildItem 'target/dist/native' -Filter '*.exe' -File | Select-Object -First 1
+          Copy-Item $exe.FullName 'portable/Apps/OpenUUYC/OpenUUYC.exe'
+          # A verified artifact marker for the USB launcher; upstream EXEs
+          # must not accidentally be run with USB credential expectations.
+          @'
+          Source=Zhanfg/openuuyc
+          Branch=feature/portable-usb-devstack
+          Mode=controller-only
+          CredentialStore=USB-Argon2id-XChaCha20Poly1305
+          VirtualIdentity=stable-per-vault
+          '@ | Set-Content 'portable/Apps/OpenUUYC/AXY_PORTABLE_BUILD.txt' -Encoding ascii
+          Copy-Item LICENSE 'portable/LICENSE-OpenUUYC.txt'
+          Copy-Item THIRD_PARTY_NOTICES 'portable/THIRD_PARTY_NOTICES.txt'
+          @'
+          FOR PERSONAL TESTING ONLY. NOT AN OFFICIAL NETEASE CLIENT.
+          Copy Apps/OpenUUYC/OpenUUYC.exe to your AXY-DevStack USB.
+          Run AXY-DevStack/OPEN-UUYC.cmd on Windows x64.
+          This portable controller DOES NOT make authentication or Windows
+          credential storage portable, and cannot control the Windows login screen
+          without separately installing system service/drivers.
+          Do not publish or redistribute this artifact without checking LICENSE.
+          '@ | Set-Content 'portable/README.txt' -Encoding UTF8
+          Get-FileHash 'portable/Apps/OpenUUYC/OpenUUYC.exe' -Algorithm SHA256 |
+            Format-List | Out-File 'portable/SHA256.txt' -Encoding utf8
+      - name: Upload artifact (no release publishing)
+        uses: actions/upload-artifact@v4
+        with:
+          name: OpenUUYC-usb-controller-win-x64
+          path: portable/
+          retention-days: 7
+          if-no-files-found: error

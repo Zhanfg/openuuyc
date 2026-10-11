@@ -25,7 +25,7 @@ fn deleted(value: Result<(), Error>) -> Result<()> {
 
 pub(super) fn ensure() -> Result<()> {
     use crate::platform::windows::host_service::vault;
-    let managed = vault::applies()?;
+    let managed = if super::portable_mode() { false } else { vault::applies()? };
     let mut checked = CHECKED.lock().unwrap_or_else(|e| e.into_inner());
     if checked[usize::from(managed)] {
         return Ok(());
@@ -33,7 +33,10 @@ pub(super) fn ensure() -> Result<()> {
     let _guard = credential_store_lock("registration-generation.lock")?;
     let marker = SecretEntry::new(SERVICE, ACCOUNT)?;
     if !is_current(marker.get_secret())? {
+        // The removable session belongs to the unlocked USB vault, not to
+        // this host's first-use generation marker. Never erase it here.
         for name in [IDENTITY_ACCOUNT, SESSION_ACCOUNT] {
+            if super::portable_vault::enabled() && name == SESSION_ACCOUNT { continue; }
             deleted(SecretEntry::new(SERVICE, name)?.delete_credential())?;
         }
         marker.set_secret(CURRENT)?;

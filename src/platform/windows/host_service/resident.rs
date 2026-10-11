@@ -29,6 +29,11 @@ pub(crate) fn is_owner() -> bool {
     OWNER.load(Ordering::Acquire)
 }
 pub(crate) fn managed() -> bool {
+    // A removable controller must never hand off identity and account state
+    // to an unrelated, already-installed unattended service on this PC.
+    if crate::account::auth::portable_mode() {
+        return false;
+    }
     !is_owner() && vault::applies().unwrap_or(false)
 }
 

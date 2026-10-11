@@ -26,12 +26,12 @@ impl AssistCodeStore {
         })
     }
 
-    fn entry(&self, id: &str) -> Result<Entry> {
+    fn entry(&self, id: &str) -> Result<SecretEntry> {
         let id = normalize_connect_id(id)?;
-        Entry::new(&self.service, &id).map_err(|_| anyhow::anyhow!("系统凭据库不可用"))
+        SecretEntry::new(&self.service, &id).map_err(|_| anyhow::anyhow!("系统凭据库不可用"))
     }
 
-    fn read(entry: &Entry) -> Result<Option<SavedCode>> {
+    fn read(entry: &SecretEntry) -> Result<Option<SavedCode>> {
         let bytes = match entry.get_secret() {
             Ok(bytes) => bytes,
             Err(KeyringError::NoEntry) => return Ok(None),
@@ -44,7 +44,7 @@ impl AssistCodeStore {
         Ok(Some(value))
     }
 
-    fn delete(entry: &Entry) -> Result<()> {
+    fn delete(entry: &SecretEntry) -> Result<()> {
         match entry.delete_credential() {
             Ok(()) | Err(KeyringError::NoEntry) => Ok(()),
             Err(_) => bail!("无法清除已保存的设备验证码"),

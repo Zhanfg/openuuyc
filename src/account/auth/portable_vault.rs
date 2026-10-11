@@ -65,7 +65,8 @@ pub(crate) fn initialize() -> Result<()> {
         let confirmation = prompt_password("请再次输入便携库主密码（仅首次创建）")?;
         ensure!(password.as_str() == confirmation.as_str(), "password confirmation mismatch");
     }
-    let params = Params::new(65536, 3, 1, Some(32)).context("Argon2id parameters")?;
+    let params = Params::new(65536, 3, 1, Some(32))
+        .map_err(|_| anyhow::anyhow!("invalid Argon2id parameters"))?;
     let mut key = Zeroizing::new([0u8; 32]);
     Argon2::new(Algorithm::Argon2id, Version::V0x13, params)
         .hash_password_into(password.as_bytes(), &meta.salt, &mut *key)

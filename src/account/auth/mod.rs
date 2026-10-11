@@ -88,6 +88,11 @@ const IDENTITY_ACCOUNT: &str = "native-device-identity";
 const SESSION_SCHEMA: u8 = 2;
 const IDENTITY_SCHEMA: u8 = 2;
 
+pub(crate) fn portable_mode() -> bool {
+    std::env::var_os("AXY_OPENUUYC_PORTABLE")
+        .as_deref() == Some(std::ffi::OsStr::new("1"))
+}
+
 #[derive(Clone, Serialize, Deserialize)]
 pub struct LoginSession {
     schema: u8,
@@ -174,6 +179,19 @@ pub struct NativeIdentity {
 
 impl NativeIdentity {
     pub fn generate() -> Result<Self> {
+        if portable_mode() {
+            // Controller-only virtual identity, created once and retained in
+            // the encrypted USB vault. Not the current host machine identity.
+            return Ok(Self {
+                schema: IDENTITY_SCHEMA,
+                client_id: Uuid::new_v4().to_string(),
+                device_id: String::new(),
+                system_id: Uuid::new_v4().to_string(),
+                machine_guid: Uuid::new_v4().to_string(),
+                name: Some("AXY Portable Controller".to_owned()),
+                controllable: false,
+            });
+        }
         let hardware = crate::platform::windows::device_profile::Hardware::read()?;
         Ok(Self {
             schema: IDENTITY_SCHEMA,
@@ -192,7 +210,8 @@ impl NativeIdentity {
     }
 
     pub(crate) fn set_controllable(&mut self, value: bool) {
-        self.controllable = value;
+        // Portable instances have no resident service or remote input daemon.
+        self.controllable = value && !portable_mode();
     }
     pub(crate) fn same_registration_settings(&self, other: &Self) -> bool {
         self.name == other.name && self.controllable == other.controllable
@@ -211,6 +230,28 @@ impl NativeIdentity {
         hardware: &crate::platform::windows::device_profile::Hardware,
     ) -> Result<WindowsDeviceInitRequest> {
         self.validate_schema()?;
+        if portable_mode() {
+            // Stable registration details: no host hardware fingerprint
+            // carried into the virtual controller identity. This remains
+            // a controller and cannot be offered as an unattended host.
+            anyhow::ensure!(!self.controllable,
+                "Portable controller identity cannot enable controlled mode");
+            return Ok(WindowsDeviceInitRequest {
+                name: self.name.clone().unwrap_or_else(|| "AXY Portable Controller".into()),
+                client_id: self.client_id.clone(),
+                system_id: self.system_id.clone(),
+                machine_guid: self.machine_guid.clone(),
+                os: "Windows x64 portable controller".into(),
+                base_board: "Portable client".into(),
+                cpu: "x86_64".into(),
+                video: Vec::new(),
+                mac: String::new(),
+                memory: 0,
+                screen: String::new(),
+                platform: 1,
+                controllable: false,
+            });
+        }
         anyhow::ensure!(
             self.system_id.eq_ignore_ascii_case(&hardware.system_uuid)
                 && self

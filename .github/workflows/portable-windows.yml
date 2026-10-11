@@ -31,8 +31,15 @@ jobs:
           if (-not (Get-Command nasm -ErrorAction SilentlyContinue)) {
             choco install nasm --yes --no-progress
           }
-          $env:PATH += ';C:\\Program Files\\NASM'
-          nasm -v
+          $nasm = (Get-Command nasm -ErrorAction SilentlyContinue).Source
+          if (-not $nasm) { $nasm = 'C:\\Program Files\\NASM\\nasm.exe' }
+          if (-not (Test-Path -LiteralPath $nasm)) { throw 'NASM executable not found' }
+          $folder = Split-Path -Parent $nasm
+          $folder | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          & $nasm -v
+      - name: Resolve prototype vault dependencies
+        shell: pwsh
+        run: cargo update
       - name: Build fork's native single-file executable
         shell: pwsh
         run: |

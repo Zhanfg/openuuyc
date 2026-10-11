@@ -3,7 +3,7 @@
 //! Protocol: Argon2id v=19, m=65536 KiB, t=3, p=1; XChaCha20-Poly1305,
 //! unique random 192-bit nonce per write, authenticated record identity (AAD).
 //! This is a candidate implementation; ship only after CI and threat-model review.
-use anyhow::{Context, Result, bail, ensure};
+use anyhow::{Context, Result, ensure};
 use argon2::{Algorithm, Argon2, Params, Version};
 use chacha20poly1305::{XChaCha20Poly1305, XNonce, KeyInit, aead::{Aead, Payload}};
 use serde::{Deserialize, Serialize};
@@ -33,6 +33,7 @@ pub(crate) fn root() -> Option<&'static Path> { ACTIVE.get().map(|v| v.dir.as_pa
 /// Initializes *only* in an interactive controller process, not in services,
 /// plugins, installers, background tasks, or elevated helper processes.
 pub(crate) fn initialize() -> Result<()> {
+    if ACTIVE.get().is_some() { return Ok(()); }
     if std::env::var_os("AXY_OPENUUYC_PORTABLE").as_deref() != Some(std::ffi::OsStr::new("1")) {
         return Ok(());
     }
@@ -85,8 +86,8 @@ pub(crate) fn initialize() -> Result<()> {
 }
 
 fn prompt_password(message: &str) -> Result<Zeroizing<String>> {
-    use windows::{core::PCWSTR, Win32::Security::Credentials::*};
-    let _ = message; // Standard Windows password dialog; message is intentionally not logged.
+    use windows::Win32::Security::Credentials::*;
+    let _ = message; // Standard Windows password dialog; never log its result.
     let mut user = [0u16; 256];
     let mut password = Zeroizing::new([0u16; 256]);
     let status = unsafe {

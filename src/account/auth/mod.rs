@@ -14,6 +14,8 @@ pub(crate) mod portable_vault;
 pub(crate) use secret::SecretEntry;
 
 pub(crate) fn enroll_resident() -> Result<()> {
+    anyhow::ensure!(!portable_mode(),
+        "USB controller mode does not install unattended host services");
     use crate::platform::windows::host_service::vault;
     if vault::applies()? {
         return Ok(());

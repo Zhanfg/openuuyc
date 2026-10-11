@@ -5,18 +5,39 @@ use keyring::{Entry, Error};
 pub(crate) struct SecretEntry {
     local: Entry,
     key: String,
+    service: String,
+    account: String,
 }
 fn failure(error: anyhow::Error) -> Error {
     Error::PlatformFailure(Box::new(std::io::Error::other(error.to_string())))
 }
 impl SecretEntry {
+    fn removable(&self) -> bool {
+        super::portable_vault::enabled() &&
+        (self.service == "com.openuuyc.session" && self.account == "default-nrd-login"
+            || self.service.starts_with("com.openuuyc.assist."))
+    }
     pub fn new(service: &str, account: &str) -> Result<Self, Error> {
         Ok(Self {
             local: Entry::new(service, account)?,
             key: vault::key(service, account),
+            service: service.to_owned(),
+            account: account.to_owned(),
         })
     }
     pub fn get_secret(&self) -> Result<Vec<u8>, Error> {
+        if self.removable() {
+            match super::portable_vault::read(&self.service, &self.account).map_err(failure)? {
+                Some(bytes) => return Ok(bytes),
+                None => {
+                    // One-time opt-in migration from this Windows user's credential manager.
+                    let legacy = self.local.get_secret()?;
+                    super::portable_vault::write(&self.service, &self.account, Some(&legacy))
+                        .map_err(failure)?;
+                    return Ok(legacy);
+                }
+            }
+        }
         if vault::applies().map_err(failure)? {
             vault::read(&self.key)
                 .map_err(failure)?
@@ -26,6 +47,10 @@ impl SecretEntry {
         }
     }
     pub fn set_secret(&self, bytes: &[u8]) -> Result<(), Error> {
+        if self.removable() {
+            return super::portable_vault::write(&self.service, &self.account, Some(bytes))
+                .map_err(failure);
+        }
         if vault::applies().map_err(failure)? {
             vault::write(&self.key, Some(bytes)).map_err(failure)
         } else {
@@ -33,6 +58,10 @@ impl SecretEntry {
         }
     }
     pub fn delete_credential(&self) -> Result<(), Error> {
+        if self.removable() {
+            return super::portable_vault::write(&self.service, &self.account, None)
+                .map_err(failure);
+        }
         if vault::applies().map_err(failure)? {
             vault::write(&self.key, None).map_err(failure)
         } else {

@@ -10,6 +10,7 @@ use anyhow::{Context, Result, bail};
 use keyring::{Entry, Error as KeyringError};
 mod generation;
 mod secret;
+pub(crate) mod portable_vault;
 pub(crate) use secret::SecretEntry;
 
 pub(crate) fn enroll_resident() -> Result<()> {
@@ -459,7 +460,9 @@ fn credential_store_lock(filename: &str) -> Result<std::fs::File> {
         .map(std::path::PathBuf::from)
         .context("LOCALAPPDATA is required for session-store coordination")?;
 
-    let directory = if crate::platform::windows::host_service::vault::applies()? {
+    let directory = if let Some(path) = portable_vault::root() {
+        path.to_owned()
+    } else if crate::platform::windows::host_service::vault::applies()? {
         crate::platform::windows::host_service::vault::root()?
     } else {
         base.join("openuuyc")
